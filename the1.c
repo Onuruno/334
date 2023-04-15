@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -12,7 +13,7 @@
 int main(int argc, char const *argv[]) {
 
     int width, height;
-    int obstacteCount, bomberCount;
+    int obstacteCount, bomberCount, activeBomberCount;
     int x,y,durability,argCount;
     int i, j, k;
     int *map;
@@ -21,14 +22,16 @@ int main(int argc, char const *argv[]) {
     char **bomberArgs;
     int **fd1;
     int **fd2;
+    pid_t *childpids;
 
     scanf("%d %d %d %d", &width, &height, &obstacteCount, &bomberCount);
 
+    activeBomberCount = bomberCount;
     map = (int *)malloc(width * height * sizeof(int));
     bomberLocations = (int *)malloc(2* bomberCount * sizeof(int));
     bomberArgCounts = (int *)malloc(bomberCount * sizeof(int));
     bomberArgs = (char**) malloc(bomberCount * sizeof(char*));
-    
+    childpids = (int *)malloc(bomberCount * sizeof(pid_t));
 
     for(i=0; i<height*width; i++){
         map[i] = 0;
@@ -47,8 +50,8 @@ int main(int argc, char const *argv[]) {
         bomberArgCounts[i] = argCount;
         bomberArgs[i] = (char*) malloc(ARGLENGTH);
 
-        j=1;
-        while(fgets(bomberArgs[i], ARGLENGTH, stdin) != NULL && j<2){
+        j=0;
+        while(fgets(bomberArgs[i], ARGLENGTH, stdin) != NULL && j<1){
             j++;
         };
     }
@@ -71,7 +74,8 @@ int main(int argc, char const *argv[]) {
     }
 
     for(i=0; i<bomberCount;i++){
-        if(fork() == 0){    //Child            
+        childpids[i] = fork();
+        if(childpids[i] == 0){    //Child            
             for(j=0; j<bomberCount; j++){
                 if(i == j){
                     dup2(fd1[j][0], 0);     //redirects input end to stdin
@@ -87,12 +91,11 @@ int main(int argc, char const *argv[]) {
             char *token;
             int t = 0;
             token = strtok(bomberArgs[i], " ");
-            printf("%s", token);
-            arguments[t++] = token;
+            arguments[t] = token;
 
-            while(token != NULL ) {
+            while(token != NULL) {
                 token = strtok(NULL, " ");
-                arguments[t++] = token;
+                arguments[++t] = token;
             }
             execv(arguments[0], arguments);
         }
@@ -104,30 +107,33 @@ int main(int argc, char const *argv[]) {
 
     k=0;
     im* in = malloc(sizeof(*in)); 
-    om* out = malloc(sizeof(*out));
     while(read(fd2[k][0], in, sizeof(im)) > 0){
-        printf("%d: %d geldi.\n", k, in->type);
+        om* out = malloc(sizeof(*out));
+
+        imp* impr = malloc(sizeof(*impr));
+        impr->pid = childpids[k];
+        impr->m = in;
+        print_output(impr, NULL, NULL, NULL);
 
         if(in->type == BOMBER_START){
-            
+
             out->type = BOMBER_LOCATION;
             out->data.new_position.x = bomberLocations[2*k];
             out->data.new_position.y = bomberLocations[2*k+1];
-            
-            write(fd1[k][1], out, sizeof(out));
         }
         else if(in->type == BOMBER_MOVE){
-            printf("Istek -> x:%d y:%d\n", in->data.target_position.x, in->data.target_position.y);
+
             int valid=1;
             if(in->data.target_position.x >= 0 && in->data.target_position.x < width 
+                && abs(in->data.target_position.x - bomberLocations[2*k]) + abs(in->data.target_position.y - bomberLocations[2*k+1]) < 2
                 && in->data.target_position.y >= 0 && in->data.target_position.y < height
                 && map[in->data.target_position.y * width + in->data.target_position.x] == 0){
 
                 for(int l=0; l<bomberCount; l++){
 
-                    if(l!=k && bomberLocations[2*l] != in->data.target_position.x 
-                            && bomberLocations[2*l+1] != in->data.target_position.y){
-                        
+                    if(l!=k && bomberLocations[2*l] == in->data.target_position.x 
+                            && bomberLocations[2*l+1] == in->data.target_position.y){
+
                         valid=0;
                         break;
                     }
@@ -140,23 +146,27 @@ int main(int argc, char const *argv[]) {
             if(valid){
                 bomberLocations[2*k] = in->data.target_position.x;
                 bomberLocations[2*k+1] = in->data.target_position.y;
-                //printf("x:%d y:%d\n", bomberLocations[2*k], bomberLocations[2*k+1]);
             }
-            
+
             out->type = BOMBER_LOCATION;
             out->data.new_position.x = bomberLocations[2*k];
             out->data.new_position.y = bomberLocations[2*k+1];
-
-            write(fd1[k][1], out, sizeof(out));
         }
         else if(in->type == BOMBER_SEE){
 
+            
+
             out->type = BOMBER_VISION;
             out->data.object_count = 0;
-
-            write(fd1[k][1], out, sizeof(out));
         }
-        
+
+        omp* ompr = malloc(sizeof(*ompr));
+        ompr->pid = childpids[k];
+        ompr->m = out;
+        print_output(NULL, ompr, NULL, NULL);
+
+        write(fd1[k][1], out, sizeof(om));
+
         k = (k+1)%bomberCount;
         sleep(1);
     }
