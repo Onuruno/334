@@ -30,6 +30,7 @@ int main(int argc, char const *argv[]) {
     int **fd4;
     pid_t *bomberpids;
     pid_t *bombpids;
+    int status;
 
     scanf("%d %d %d %d", &width, &height, &obstacteCount, &bomberCount);
 
@@ -139,12 +140,17 @@ int main(int argc, char const *argv[]) {
             ufds1[b].events = POLLIN;
         }
 
-        if(poll(ufds1, bombCount, 100) > 0){
+        if(poll(ufds1, bombCount, 0) > 0){
 
             for(b=0; b<bombCount; b++){
                 if(ufds1[b].revents & POLLIN){
                     if(read_data(fd4[b][0], in) > 0){
                         if(in->type == BOMB_EXPLODE){
+
+                            imp* impr = malloc(sizeof(*impr));
+                            impr->pid = bombpids[b];
+                            impr->m = in;
+                            print_output(impr, NULL, NULL, NULL);
 
                             int posx = bombLocations[2*b];
                             int posy = bombLocations[2*b+1];
@@ -166,14 +172,23 @@ int main(int argc, char const *argv[]) {
                                             }
                                         }
                                     }
-                                    if(map[posy][posx+i] > 0){              //check for obstacle
+                                    if(map[posy][posx+i] != 0){              //check for obstacle
                                         for(j=0; j<i; j++){
                                             if(map[posy][posx+j] != 0){
                                                 break;
                                             }
                                         }
                                         if(j == i){
-                                            map[posy][posx+i]-=1;
+                                            if(map[posy][posx+i] > 0){
+                                                map[posy][posx+i]-=1;
+                                            }
+                                            
+                                            obsd* obstacle = malloc(sizeof(*obstacle));
+                                            obstacle->position.x = posx+i;
+                                            obstacle->position.y = posy;
+                                            obstacle->remaining_durability = map[posy][posx+i];
+
+                                            print_output(NULL, NULL, obstacle, NULL);
                                         }
                                     }
                                 }
@@ -193,14 +208,23 @@ int main(int argc, char const *argv[]) {
                                             }
                                         }
                                     }
-                                    if(map[posy][posx-i] > 0){
+                                    if(map[posy][posx-i] != 0){
                                         for(j=0; j<i; j++){
                                             if(map[posy][posx-j] != 0){
                                                 break;
                                             }
                                         }
                                         if(j == i){
-                                            map[posy][posx-i]-=1;
+                                            if(map[posy][posx-i] > 0){
+                                                map[posy][posx-i]-=1;
+                                            }
+
+                                            obsd* obstacle = malloc(sizeof(*obstacle));
+                                            obstacle->position.x = posx-i;
+                                            obstacle->position.y = posy;
+                                            obstacle->remaining_durability = map[posy][posx-i];
+
+                                            print_output(NULL, NULL, obstacle, NULL);
                                         }
                                     }
                                 }
@@ -220,14 +244,23 @@ int main(int argc, char const *argv[]) {
                                             }
                                         }
                                     }
-                                    if(map[posy-i][posx] > 0){
+                                    if(map[posy-i][posx] != 0){
                                         for(j=0; j<i; j++){
                                             if(map[posy-j][posx] != 0){
                                                 break;
                                             }
                                         }
                                         if(j == i){
-                                            map[posy-i][posx]-=1;
+                                            if(map[posy-i][posx] > 0){
+                                                map[posy-i][posx]-=1;
+                                            }
+
+                                            obsd* obstacle = malloc(sizeof(*obstacle));
+                                            obstacle->position.x = posx;
+                                            obstacle->position.y = posy-i;
+                                            obstacle->remaining_durability = map[posy-i][posx];
+
+                                            print_output(NULL, NULL, obstacle, NULL);
                                         }
                                     }
                                 }
@@ -247,18 +280,29 @@ int main(int argc, char const *argv[]) {
                                             }
                                         }
                                     }
-                                    if(map[posy+i][posx] > 0){
+                                    if(map[posy+i][posx] != 0){
                                         for(j=0; j<i; j++){
                                             if(map[posy+j][posx] != 0){
                                                 break;
                                             }
                                         }
                                         if(j == i){
-                                            map[posy+i][posx]-=1;
+                                            if(map[posy+i][posx] > 0){
+                                                map[posy+i][posx]-=1;
+                                            }
+
+                                            obsd* obstacle = malloc(sizeof(*obstacle));
+                                            obstacle->position.x = posx;
+                                            obstacle->position.y = posy+i;
+                                            obstacle->remaining_durability = map[posy+i][posx];
+
+                                            print_output(NULL, NULL, obstacle, NULL);
                                         }
                                     }
                                 }
                             }
+                            bombLocations[2*b] = -1; //bombs can also go to heaven(R.I.P.)
+                            bombLocations[2*b+1] = -1;
                         }
                     }
                 }
@@ -271,7 +315,7 @@ int main(int argc, char const *argv[]) {
             ufds2[k].events = POLLIN;
         }
 
-        if(poll(ufds2, bomberCount, 100) > 0){
+        if(poll(ufds2, bomberCount, 0) > 0){
 
             for(k=0; k<bomberCount; k++){
                 if(ufds2[k].revents & POLLIN){
@@ -317,29 +361,22 @@ int main(int argc, char const *argv[]) {
                         }
                         else if(in->type == BOMBER_MOVE){
 
-                            int valid=1;
                             if(in->data.target_position.x >= 0 && in->data.target_position.x < width 
                                 && abs(in->data.target_position.x - bomberLocations[2*k]) + abs(in->data.target_position.y - bomberLocations[2*k+1]) < 2
                                 && in->data.target_position.y >= 0 && in->data.target_position.y < height
                                 && map[in->data.target_position.y][in->data.target_position.x] == 0){
-
-                                for(int l=0; l<bomberCount; l++){
+                                int l;
+                                for(l=0; l<bomberCount; l++){
 
                                     if(l!=k && bomberLocations[2*l] == in->data.target_position.x 
                                             && bomberLocations[2*l+1] == in->data.target_position.y){
-
-                                        valid=0;
                                         break;
                                     }
                                 }
-                            }
-                            else{
-                                valid=0;
-                            }
-
-                            if(valid){
-                                bomberLocations[2*k] = in->data.target_position.x;
-                                bomberLocations[2*k+1] = in->data.target_position.y;
+                                if(l == bomberCount){
+                                    bomberLocations[2*k] = in->data.target_position.x;
+                                    bomberLocations[2*k+1] = in->data.target_position.y;
+                                }
                             }
 
                             out->type = BOMBER_LOCATION;
@@ -354,26 +391,56 @@ int main(int argc, char const *argv[]) {
                         }
                         else if(in->type == BOMBER_SEE){
 
-                            int objectCount;
+                            int objectCount=0;
                             od objects[25];
+                            
+                            int posx = bomberLocations[2*k];
+                            int posy = bomberLocations[2*k+1];
 
-                            for(int m=0; m<0; m++){//todo
-                                if(map[m] != 0){
-                                    objects[objectCount].type = OBSTACLE;
-                                    objects[objectCount].position.x = m % width;
-                                    objects[objectCount].position.y = m / width;
-                                    objectCount++;
+                            int l, m;
+                            for(l=0; l<bomberCount; l++){           //check for bombers in vision range
+                               if(l != k && bomberLocations[2*l] != -1 && bomberLocations[2*l+1] != -1 
+                                    && abs(bomberLocations[2*l] - bomberLocations[2*k]) + abs(bomberLocations[2*l+1] - bomberLocations[2*k+1]) <= 3){
+                                    
+                                    objects[objectCount].position.x=bomberLocations[2*l];
+                                    objects[objectCount].position.y=bomberLocations[2*l+1];
+                                    objects[objectCount++].type = BOMBER;
+                               } 
+                            }
+
+                            for(l=0; l<bombCount; l++){             //check for bombs in vision range
+                               if(bombLocations[2*l] != -1 && bombLocations[2*l+1] != -1 
+                                    && abs(bombLocations[2*l] - bomberLocations[2*k]) + abs(bombLocations[2*l+1] - bomberLocations[2*k+1]) <= 3){
+                                    
+                                    objects[objectCount].position.x=bomberLocations[2*l];
+                                    objects[objectCount].position.y=bomberLocations[2*l+1];
+                                    objects[objectCount++].type = BOMB;
+                               } 
+                            }
+
+                            for(l=0; l<height; l++){                //check for obstacles in vision range
+                                for(m=0; m<width; m++){
+                                    if(map[l][m] != 0 && abs(m - bomberLocations[2*k]) + abs(l - bomberLocations[2*k+1]) <= 3){
+
+                                        objects[objectCount].position.x=m;
+                                        objects[objectCount].position.y=l;
+                                        objects[objectCount++].type = OBSTACLE;
+                                    }
                                 }
                             }
 
                             out->type = BOMBER_VISION;
-                            out->data.object_count = 0;
+                            out->data.object_count = objectCount;
 
                             ompr->pid = bomberpids[k];
                             ompr->m = out;
-                            print_output(NULL, ompr, NULL, NULL);
+                            print_output(NULL, ompr, NULL, objects);
 
                             send_message(fd1[k][1], out);
+
+                            if(objectCount){
+                                send_object_data(fd1[k][1], objectCount, objects);
+                            }
                         }
                         else if(in->type == BOMBER_PLANT){
                             
@@ -404,7 +471,7 @@ int main(int argc, char const *argv[]) {
                                 char str[256];
                                 sprintf(str, "%ld", in->data.bomb_info.interval);
 
-                                execl("./bomb_inek", "./bomb_inek", str, (char*) NULL);
+                                execl("./bomb", "./bomb", str, (char*) NULL);
                             }
                             else {              //Parent
                                 close(fd3[bombCount][0]);       //parent writes to fd3
@@ -427,14 +494,23 @@ int main(int argc, char const *argv[]) {
 
                             send_message(fd1[k][1], out);
                         }
-
                     }
                 }
             }
         }
-
         usleep(1000);
-    }    
+    }
+    
+    for(int a=0; a<bomberCount; a++){
+        close(fd1[a][1]);
+        close(fd2[a][0]);
+        waitpid(bomberpids[a], &status, 0);
+    }
+    for(int b=0; b<bombCount; b++){
+        close(fd3[b][1]);
+        close(fd4[b][0]);
+        waitpid(bombpids[b], &status, 0);
+    }
 
     return 0;
 }
