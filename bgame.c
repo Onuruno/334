@@ -15,7 +15,7 @@
 int main(int argc, char const *argv[]) {
 
     int width, height;
-    int obstacteCount, bomberCount, activeBomberCount, bombCount;
+    int obstacteCount, bomberCount, activeBomberCount, bombCount, activeBombCount;
     int x,y,durability,argCount;
     int i, j;
     int **map;
@@ -36,6 +36,7 @@ int main(int argc, char const *argv[]) {
 
     activeBomberCount = bomberCount;
     bombCount = 0;
+    activeBombCount = 0;
     map = (int **)malloc(height * sizeof(int*));
     bomberLocations = (int *)malloc(2* bomberCount * sizeof(int));
     bomberArgCounts = (int *)malloc(bomberCount * sizeof(int));
@@ -132,7 +133,7 @@ int main(int argc, char const *argv[]) {
 
     im* in = malloc(sizeof(*in));
     omp* ompr = malloc(sizeof(*ompr));
-    while(activeBomberCount){
+    while(activeBomberCount || activeBombCount){
 
         struct pollfd ufds1[bombCount];
         for(b=0; b<bombCount; b++){
@@ -303,6 +304,8 @@ int main(int argc, char const *argv[]) {
                             }
                             bombLocations[2*b] = -1; //bombs can also go to heaven(R.I.P.)
                             bombLocations[2*b+1] = -1;
+
+                            activeBombCount--;
                         }
                     }
                 }
@@ -400,7 +403,7 @@ int main(int argc, char const *argv[]) {
                             int l, m;
                             for(l=0; l<bomberCount; l++){           //check for bombers in vision range
                                if(l != k && bomberLocations[2*l] != -1 && bomberLocations[2*l+1] != -1 
-                                    && abs(bomberLocations[2*l] - bomberLocations[2*k]) + abs(bomberLocations[2*l+1] - bomberLocations[2*k+1]) <= 3){
+                                    && abs(bomberLocations[2*l] - posx) + abs(bomberLocations[2*l+1] - posy) <= 3){
                                     
                                     objects[objectCount].position.x=bomberLocations[2*l];
                                     objects[objectCount].position.y=bomberLocations[2*l+1];
@@ -410,7 +413,7 @@ int main(int argc, char const *argv[]) {
 
                             for(l=0; l<bombCount; l++){             //check for bombs in vision range
                                if(bombLocations[2*l] != -1 && bombLocations[2*l+1] != -1 
-                                    && abs(bombLocations[2*l] - bomberLocations[2*k]) + abs(bombLocations[2*l+1] - bomberLocations[2*k+1]) <= 3){
+                                    && abs(bombLocations[2*l] - posx) + abs(bombLocations[2*l+1] - posy) <= 3){
                                     
                                     objects[objectCount].position.x=bomberLocations[2*l];
                                     objects[objectCount].position.y=bomberLocations[2*l+1];
@@ -420,7 +423,7 @@ int main(int argc, char const *argv[]) {
 
                             for(l=0; l<height; l++){                //check for obstacles in vision range
                                 for(m=0; m<width; m++){
-                                    if(map[l][m] != 0 && abs(m - bomberLocations[2*k]) + abs(l - bomberLocations[2*k+1]) <= 3){
+                                    if(map[l][m] != 0 && abs(m - posx) + abs(l - posy) <= 3){
 
                                         objects[objectCount].position.x=m;
                                         objects[objectCount].position.y=l;
@@ -484,6 +487,7 @@ int main(int argc, char const *argv[]) {
                             bombRadius[bombCount] = in->data.bomb_info.radius;
 
                             bombCount++;
+                            activeBombCount++;
 
                             out->type = BOMBER_PLANT_RESULT;
                             out->data.planted = 1;
